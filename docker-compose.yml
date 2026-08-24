@@ -1,2 +1,186 @@
-services: {}
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cloudops
+      POSTGRES_USER: cloudops
+      POSTGRES_PASSWORD: cloudops
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudops -d cloudops"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - cloudops-internal
 
+  cloudops-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://cloudops:cloudops@postgres:5432/cloudops
+      RUNBOOK_DIRECTORY: /app/runbooks
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      INCIDENT_QUEUE_URL: http://localstack:4566/queue/us-east-1/000000000000/cloudops-incidents
+      INCIDENT_DLQ_URL: http://localstack:4566/queue/us-east-1/000000000000/cloudops-incidents-dlq
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - cloudops-internal
+
+  faulty-service:
+    build:
+      context: ./demo/faulty-service
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - cloudops-internal
+
+  prometheus:
+    image: prom/prometheus:v3.4.2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      faulty-service:
+        condition: service_healthy
+      alertmanager:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - cloudops-internal
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    depends_on:
+      cloudops-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - cloudops-internal
+
+  localstack:
+    image: localstack/localstack:4.14.0
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      PERSISTENCE: "1"
+      SQS_ENDPOINT_STRATEGY: path
+      LOCALSTACK_HOST: localstack
+    ports:
+      - "127.0.0.1:4567:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./infrastructure/localstack/init:/etc/localstack/init:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - awslocal sqs get-queue-url --queue-name cloudops-incidents >/dev/null 2>&1
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+    networks:
+      - cloudops-internal
+
+  incident-worker:
+    build:
+      context: .
+      dockerfile: apps/incident-worker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://cloudops:cloudops@postgres:5432/cloudops
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      INCIDENT_QUEUE_URL: http://localstack:4566/queue/us-east-1/000000000000/cloudops-incidents
+      INCIDENT_DLQ_URL: http://localstack:4566/queue/us-east-1/000000000000/cloudops-incidents-dlq
+    ports:
+      - "8002:8002"
+    depends_on:
+      cloudops-api:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - cloudops-internal
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  alertmanager-data:
+  localstack-data:
+
+networks:
+  cloudops-internal:
+    driver: bridge

@@ -1,0 +1,16 @@
+groups:
+  - name: demo-service-alerts
+    rules:
+      - alert: DemoServiceHighCPU
+        expr: demo_cpu_load_percent > 85
+        for: 15s
+        labels:
+          severity: high
+          service: demo-service
+          metric_name: demo_cpu_load_percent
+          threshold: "85"
+        annotations:
+          summary: Demo service CPU saturation
+          description: Demo service CPU load has exceeded 85 percent for 15 seconds.
+          current_value: "{{ $value }}"
+

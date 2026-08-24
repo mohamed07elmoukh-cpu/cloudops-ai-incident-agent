@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloudops-ai-incident-agent"
+version = "0.1.0"
+description = "Local-first CloudOps incident detection and guarded remediation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.14,<2",
+    "boto3>=1.35,<2",
+    "fastapi>=0.115,<1",
+    "prometheus-client>=0.21,<1",
+    "psycopg[binary]>=3.2,<4",
+    "pydantic>=2.10,<3",
+    "PyYAML>=6,<7",
+    "sqlalchemy>=2.0,<3",
+    "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "boto3-stubs[sqs]>=1.35,<2",
+    "httpx>=0.28,<1",
+    "mypy>=1.14,<2",
+    "pytest>=8,<10",
+    "pytest-cov>=6,<8",
+    "ruff>=0.9,<1",
+    "types-PyYAML>=6.0,<7",
+]
+
+[tool.setuptools.packages.find]
+include = ["apps*", "cloudops_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["alembic/versions"]

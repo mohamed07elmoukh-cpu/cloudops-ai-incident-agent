@@ -1,0 +1,19 @@
+global:
+  resolve_timeout: 1m
+
+route:
+  receiver: cloudops-webhook
+  group_by:
+    - alertname
+    - service
+  group_wait: 1s
+  group_interval: 5s
+  repeat_interval: 1h
+
+receivers:
+  - name: cloudops-webhook
+    webhook_configs:
+      - url: http://cloudops-api:8000/api/webhooks/alertmanager
+        send_resolved: true
+        max_alerts: 20
+

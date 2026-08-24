@@ -1,0 +1,36 @@
+name: scale_service
+version: "1.0"
+incident_types:
+  - CPU_SATURATION
+risk_level: LOW
+parameters:
+  service:
+    type: string
+    required: true
+    default: demo-service
+  desired_capacity:
+    type: integer
+    required: true
+    default: 2
+    minimum: 1
+    maximum: 10
+preconditions:
+  - incident status is OPEN or INVESTIGATING
+  - incident type is CPU_SATURATION
+steps:
+  - action: simulated_scale
+    description: Simulate increasing the local service capacity.
+    arguments:
+      service: "{{ service }}"
+      desired_capacity: "{{ desired_capacity }}"
+verification:
+  metric_name: cpu_usage_percent
+  operator: lt
+  threshold: 70
+  max_attempts: 3
+rollback:
+  - action: simulated_restore_capacity
+    description: Restore the previous simulated service capacity.
+    arguments:
+      service: "{{ service }}"
+
