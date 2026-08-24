@@ -1,0 +1,11 @@
+name: restart_ecs_task
+description: Replace an unhealthy ECS task.
+risk: medium
+approval_required: true
+parameters:
+  - cluster
+  - service
+verification:
+  - service_stable
+  - healthy_task_count_restored
+

@@ -1,0 +1,12 @@
+name: rollback_ecs_deployment
+description: Roll back an ECS service to its previous task definition.
+risk: high
+approval_required: true
+parameters:
+  - cluster
+  - service
+  - previous_task_definition
+verification:
+  - service_stable
+  - error_rate_recovered
+

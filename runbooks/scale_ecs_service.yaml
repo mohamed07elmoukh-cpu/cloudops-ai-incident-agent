@@ -1,0 +1,12 @@
+name: scale_ecs_service
+description: Increase the desired count of an ECS service.
+risk: medium
+approval_required: true
+parameters:
+  - cluster
+  - service
+  - desired_count
+verification:
+  - service_stable
+  - target_capacity_reached
+
