@@ -7,4 +7,7 @@
 __pycache__
 *.pyc
 tests
-
+**/node_modules
+**/.next
+**/playwright-report
+**/test-results

@@ -46,7 +46,11 @@ class RunbookDefinition(BaseModel):
     name: str = Field(min_length=1, pattern=r"^[a-z][a-z0-9_]*$")
     version: str = Field(min_length=1)
     incident_types: list[str] = Field(min_length=1)
+    executor: Literal["simulated", "aws"] = "simulated"
     risk_level: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    approval_required: bool = False
+    max_monthly_cost_delta_usd: float = Field(default=0, ge=0)
+    cooldown_seconds: int = Field(default=0, ge=0, le=86400)
     parameters: dict[str, RunbookParameter]
     preconditions: list[str] = Field(min_length=1)
     steps: list[RunbookStep] = Field(min_length=1)
@@ -95,4 +99,3 @@ class RunbookLoader:
             if incident_type in runbook.incident_types:
                 return runbook
         raise InvalidRunbookError(f"no valid runbook supports {incident_type}")
-

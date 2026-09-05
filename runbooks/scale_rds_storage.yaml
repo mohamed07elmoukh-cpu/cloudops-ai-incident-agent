@@ -1,0 +1,40 @@
+name: scale_rds_storage
+version: "1.0"
+incident_types:
+  - RDS_STORAGE_LOW
+executor: aws
+risk_level: MEDIUM
+approval_required: false
+max_monthly_cost_delta_usd: 150
+cooldown_seconds: 3600
+parameters:
+  db_instance_identifier:
+    type: string
+    required: true
+  allocated_storage_gib:
+    type: integer
+    required: false
+    default: null
+    minimum: 20
+    maximum: 65536
+  max_allocated_storage_gib:
+    type: integer
+    required: false
+    default: null
+    minimum: 22
+    maximum: 65536
+preconditions:
+  - at least one storage target is supplied
+  - requested values are supported by the database engine and instance class
+steps:
+  - action: scale_rds_storage
+    description: Increase allocated storage or the RDS storage autoscaling limit.
+verification:
+  metric_name: FreeStorageSpace
+  operator: gt
+  threshold: 1073741824
+  max_attempts: 3
+rollback:
+  - action: restore_rds_storage_limit
+    description: Restore the former autoscaling limit when allocated storage was not changed.
+

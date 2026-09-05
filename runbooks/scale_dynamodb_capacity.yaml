@@ -1,0 +1,38 @@
+name: scale_dynamodb_capacity
+version: "1.0"
+incident_types:
+  - DYNAMODB_CAPACITY_SATURATION
+executor: aws
+risk_level: MEDIUM
+approval_required: false
+max_monthly_cost_delta_usd: 200
+cooldown_seconds: 900
+parameters:
+  table_name:
+    type: string
+    required: true
+  read_capacity_units:
+    type: integer
+    required: true
+    minimum: 1
+    maximum: 40000
+  write_capacity_units:
+    type: integer
+    required: true
+    minimum: 1
+    maximum: 40000
+preconditions:
+  - table capacity mode is PROVISIONED
+  - requested RCU and WCU do not reduce the current capacity
+steps:
+  - action: scale_dynamodb_capacity
+    description: Increase provisioned read and write capacity for the DynamoDB table.
+verification:
+  metric_name: ThrottledRequests
+  operator: lte
+  threshold: 0
+  max_attempts: 3
+rollback:
+  - action: restore_dynamodb_capacity
+    description: Restore the previous provisioned RCU and WCU values.
+

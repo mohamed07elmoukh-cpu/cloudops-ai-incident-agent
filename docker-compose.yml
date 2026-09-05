@@ -32,6 +32,9 @@ services:
       AWS_SECRET_ACCESS_KEY: test
       INCIDENT_QUEUE_URL: http://localstack:4566/queue/us-east-1/000000000000/cloudops-incidents
       INCIDENT_DLQ_URL: http://localstack:4566/queue/us-east-1/000000000000/cloudops-incidents-dlq
+      WORKER_HEALTH_URL: http://incident-worker:8002/health
+      REMEDIATION_MODE: simulated
+      REMEDIATION_MAX_MONTHLY_COST_DELTA_USD: "500"
     ports:
       - "8000:8000"
     depends_on:
@@ -172,6 +175,31 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
+    networks:
+      - cloudops-internal
+
+  dashboard:
+    build:
+      context: ./apps/dashboard
+    environment:
+      CLOUDOPS_API_URL: http://cloudops-api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      cloudops-api:
+        condition: service_healthy
+      incident-worker:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     networks:
       - cloudops-internal
 

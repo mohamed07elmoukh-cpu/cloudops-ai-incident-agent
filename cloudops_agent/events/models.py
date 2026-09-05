@@ -40,3 +40,21 @@ class MetricThresholdPayload(BaseModel):
     alert_status: Literal["firing", "resolved"]
     labels: dict[str, str] = Field(default_factory=dict)
     annotations: dict[str, str] = Field(default_factory=dict)
+
+
+class AwsResourceMetricPayload(BaseModel):
+    """Normalized capacity signal originating from a CloudWatch alarm."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    resource_type: Literal["EC2", "DYNAMODB", "RDS"]
+    resource_id: str = Field(min_length=1, max_length=255)
+    metric_name: str = Field(min_length=1, max_length=255)
+    value: float
+    threshold: float
+    condition: Literal["above", "below"]
+    alarm_name: str = Field(min_length=1, max_length=255)
+    aws_account_id: str = Field(min_length=1, max_length=32)
+    aws_region: str = Field(min_length=1, max_length=64)
+    dimensions: dict[str, str] = Field(default_factory=dict)
+    raw_event: dict[str, Any]

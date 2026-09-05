@@ -1,0 +1,9 @@
+aws_region        = "eu-west-1"
+name_prefix       = "cloudops-prod"
+alarm_name_prefix = "cloudops-"
+worker_role_name  = "cloudops-incident-worker-role"
+
+tags = {
+  Environment = "production"
+  Owner       = "platform-engineering"
+}

@@ -76,17 +76,22 @@ class SqsEventQueue(EventQueue):
             read_timeout=15,
             retries={"max_attempts": 3, "mode": "standard"},
         )
-        return cast(
-            SqsClientProtocol,
-            boto3.client(
-                "sqs",
-                endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
-                region_name=os.getenv("AWS_REGION", "us-east-1"),
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-                config=config,
-            ),
-        )
+        client_options: dict[str, Any] = {
+            "region_name": os.getenv("AWS_REGION", "us-east-1"),
+            "config": config,
+        }
+        endpoint_url = os.getenv("AWS_ENDPOINT_URL")
+        if endpoint_url:
+            client_options["endpoint_url"] = endpoint_url
+        access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        if access_key and secret_key:
+            client_options["aws_access_key_id"] = access_key
+            client_options["aws_secret_access_key"] = secret_key
+            session_token = os.getenv("AWS_SESSION_TOKEN")
+            if session_token:
+                client_options["aws_session_token"] = session_token
+        return cast(SqsClientProtocol, boto3.client("sqs", **client_options))
 
     @classmethod
     def from_environment(cls) -> SqsEventQueue:

@@ -8,4 +8,8 @@ __pycache__/
 *.sqlite3
 htmlcov/
 .coverage
-
+apps/dashboard/node_modules/
+apps/dashboard/.next/
+apps/dashboard/tsconfig.tsbuildinfo
+apps/dashboard/playwright-report/
+apps/dashboard/test-results/

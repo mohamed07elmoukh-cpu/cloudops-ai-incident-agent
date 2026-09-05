@@ -1,0 +1,33 @@
+name: scale_ec2_auto_scaling_group
+version: "1.0"
+incident_types:
+  - EC2_CAPACITY_SATURATION
+executor: aws
+risk_level: MEDIUM
+approval_required: false
+max_monthly_cost_delta_usd: 250
+cooldown_seconds: 900
+parameters:
+  auto_scaling_group_name:
+    type: string
+    required: true
+  desired_capacity:
+    type: integer
+    required: true
+    minimum: 1
+    maximum: 100
+preconditions:
+  - incident status is OPEN or INVESTIGATING
+  - desired capacity is greater than the current capacity and does not exceed MaxSize
+steps:
+  - action: scale_ec2_auto_scaling_group
+    description: Increase the desired capacity of the EC2 Auto Scaling Group.
+verification:
+  metric_name: CPUUtilization
+  operator: lt
+  threshold: 70
+  max_attempts: 3
+rollback:
+  - action: restore_ec2_auto_scaling_group
+    description: Restore the previous desired capacity.
+

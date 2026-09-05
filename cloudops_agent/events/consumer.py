@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
+from cloudops_agent.events.cloudwatch import decode_event_message
 from cloudops_agent.events.metrics import (
     EVENT_PROCESSING_SECONDS,
     EVENTS_DUPLICATE,
@@ -17,7 +18,6 @@ from cloudops_agent.events.metrics import (
     EVENTS_RECEIVED,
     INCIDENTS_CREATED,
 )
-from cloudops_agent.events.models import CloudEventEnvelope
 from cloudops_agent.events.processor import IncidentEventProcessor
 from cloudops_agent.events.queue import EventQueue, QueueMessage
 
@@ -59,7 +59,7 @@ class IncidentWorker:
         EVENTS_RECEIVED.inc()
         started = time.monotonic()
         try:
-            event = CloudEventEnvelope.model_validate_json(message.body)
+            event = decode_event_message(message.body)
             with self.session_factory() as session:
                 result = self.processor.process(event, session)
             if result.duplicate:

@@ -1,0 +1,34 @@
+name: scale_rds_compute
+version: "1.0"
+incident_types:
+  - RDS_COMPUTE_SATURATION
+executor: aws
+risk_level: HIGH
+approval_required: true
+max_monthly_cost_delta_usd: 500
+cooldown_seconds: 3600
+parameters:
+  db_instance_identifier:
+    type: string
+    required: true
+  db_instance_class:
+    type: string
+    required: true
+  apply_immediately:
+    type: boolean
+    required: true
+    default: false
+preconditions:
+  - a human approver is recorded
+  - target class is returned by DescribeValidDBInstanceModifications
+steps:
+  - action: scale_rds_compute
+    description: Change the RDS DB instance class after explicit human approval.
+verification:
+  metric_name: CPUUtilization
+  operator: lt
+  threshold: 70
+  max_attempts: 3
+rollback:
+  - action: restore_rds_compute
+    description: Restore the previous DB instance class with explicit approval.
