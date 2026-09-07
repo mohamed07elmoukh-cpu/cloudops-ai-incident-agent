@@ -317,6 +317,7 @@ class AwsRemediationExecutor(SimulatedRemediationExecutor):
                 "parameters": resolved_parameters,
                 "approved_by": approved_by,
                 "estimated_monthly_cost_delta_usd": estimated_monthly_cost_delta_usd,
+                "cost_estimate_source": "AWS Price List Query API",
                 "verification_policy": runbook.verification.model_dump(),
             },
         )

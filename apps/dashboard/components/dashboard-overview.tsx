@@ -26,6 +26,7 @@ import {
 } from "recharts";
 
 import { IncidentTable } from "@/components/incident-table";
+import { LiveInfrastructure } from "@/components/live-infrastructure";
 import { formatDuration, getIncidents, getStatistics, getSystemHealth } from "@/lib/api";
 import type { Incident, Statistics } from "@/lib/types";
 
@@ -162,6 +163,8 @@ export function DashboardOverview() {
       <MetricCard label="Temps moyen de résolution" value={formatDuration(stats?.average_resolution_seconds ?? null)} note="MTTR" icon={Clock3} />
       <MetricCard label="État de la plateforme" value={health.data?.status === "healthy" ? "Opérationnel" : health.isLoading ? "—" : "Dégradé"} note={`${healthyComponents}/4 services`} tone={health.data?.status === "healthy" ? "success" : "warning"} icon={Activity} />
     </section>
+
+    <LiveInfrastructure />
 
     <section className="dashboard-grid insight-grid">
       <article className="card trend-card">

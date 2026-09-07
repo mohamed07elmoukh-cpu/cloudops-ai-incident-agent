@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Literal
 
@@ -148,7 +149,9 @@ def _event_uuid(value: str) -> uuid.UUID:
         return uuid.uuid5(EVENT_NAMESPACE, f"eventbridge:{value}")
 
 
-def cloudwatch_alarm_to_cloud_event(raw: dict[str, Any]) -> CloudEventEnvelope:
+def cloudwatch_alarm_to_cloud_event(
+    raw: dict[str, Any], *, service_key: str | None = None
+) -> CloudEventEnvelope:
     """Convert one ALARM transition to the worker's strict internal contract."""
     aws_event = CloudWatchAlarmEvent.model_validate(raw)
     if aws_event.detail.state.value != "ALARM":
@@ -164,6 +167,11 @@ def cloudwatch_alarm_to_cloud_event(raw: dict[str, Any]) -> CloudEventEnvelope:
         raise ValueError("CloudWatch alarm metric dimensions must be an object")
     dimensions = {str(key): str(value) for key, value in raw_dimensions.items()}
     resource_type, resource_id = _resource(namespace, dimensions)
+    correlation_group = (
+        f"service:{service_key.strip().lower()}"
+        if service_key and service_key.strip()
+        else f"resource:{resource_type.lower()}:{resource_id}"
+    )
     reason_data = _reason_data(aws_event.detail.state)
     event_id = _event_uuid(aws_event.event_id)
     condition = _condition(reason_data, aws_event.detail.configuration, metric_name)
@@ -178,6 +186,7 @@ def cloudwatch_alarm_to_cloud_event(raw: dict[str, Any]) -> CloudEventEnvelope:
         aws_account_id=aws_event.account,
         aws_region=aws_event.region,
         dimensions=dimensions,
+        correlation_group=correlation_group,
         raw_event=raw,
     )
     incident_type = (
@@ -197,11 +206,18 @@ def cloudwatch_alarm_to_cloud_event(raw: dict[str, Any]) -> CloudEventEnvelope:
     )
 
 
-def decode_event_message(body: str) -> CloudEventEnvelope:
+def decode_event_message(
+    body: str,
+    service_key_resolver: Callable[[str], str | None] | None = None,
+) -> CloudEventEnvelope:
     """Decode either an internal CloudEvent or a native EventBridge message."""
     raw = json.loads(body)
     if not isinstance(raw, dict):
         raise ValueError("SQS event body must be a JSON object")
     if raw.get("source") == "aws.cloudwatch" and raw.get("detail-type"):
-        return cloudwatch_alarm_to_cloud_event(raw)
+        service_key = None
+        resources = raw.get("resources")
+        if service_key_resolver and isinstance(resources, list) and resources:
+            service_key = service_key_resolver(str(resources[0]))
+        return cloudwatch_alarm_to_cloud_event(raw, service_key=service_key)
     return CloudEventEnvelope.model_validate_json(body)

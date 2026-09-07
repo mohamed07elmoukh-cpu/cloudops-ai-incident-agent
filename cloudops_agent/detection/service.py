@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from cloudops_agent.diagnosis import DiagnosticService
 from cloudops_agent.models import Evidence, Incident, IncidentStatus, Severity
 from cloudops_agent.schemas import MetricEvaluationRequest, ResourceMetricEvaluationRequest
 
@@ -128,6 +129,7 @@ class DetectionService:
                 ),
                 detected_at=metric.timestamp,
                 correlation_key=correlation_key,
+                correlation_group=metric.correlation_group,
                 remediation_attempted=False,
             )
             self.session.add(incident)
@@ -143,6 +145,8 @@ class DetectionService:
                 raw_data=raw_data or metric.model_dump(mode="json"),
             )
         )
+        if metric.correlation_group:
+            DiagnosticService(self.session).refresh(metric.correlation_group, commit=False)
         if commit:
             self.session.commit()
             self.session.refresh(incident)

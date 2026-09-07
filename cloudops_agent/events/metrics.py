@@ -34,4 +34,3 @@ INCIDENTS_CREATED = Counter(
     "Incidents created by normalized events.",
     registry=WORKER_REGISTRY,
 )
-

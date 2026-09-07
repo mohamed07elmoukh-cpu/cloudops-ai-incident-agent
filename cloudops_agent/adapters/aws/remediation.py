@@ -6,6 +6,7 @@ import os
 from typing import Any, cast
 
 import boto3
+from botocore.config import Config
 
 
 class AwsActionError(RuntimeError):
@@ -24,14 +25,26 @@ class AwsRemediationAdapter:
     ) -> None:
         region_name = os.getenv("AWS_REGION", "us-east-1")
         endpoint_url = os.getenv("AWS_REMEDIATION_ENDPOINT_URL")
+        external_config = Config(
+            ignore_configured_endpoint_urls=True  # type: ignore[call-arg]
+        )
         self.autoscaling = autoscaling_client or boto3.client(
-            "autoscaling", region_name=region_name, endpoint_url=endpoint_url
+            "autoscaling",
+            region_name=region_name,
+            endpoint_url=endpoint_url,
+            config=external_config,
         )
         self.dynamodb = dynamodb_client or boto3.client(
-            "dynamodb", region_name=region_name, endpoint_url=endpoint_url
+            "dynamodb",
+            region_name=region_name,
+            endpoint_url=endpoint_url,
+            config=external_config,
         )
         self.rds = rds_client or boto3.client(
-            "rds", region_name=region_name, endpoint_url=endpoint_url
+            "rds",
+            region_name=region_name,
+            endpoint_url=endpoint_url,
+            config=external_config,
         )
 
     def execute(self, action: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -53,9 +66,7 @@ class AwsRemediationAdapter:
     def _scale_ec2(self, arguments: dict[str, Any]) -> dict[str, Any]:
         group_name = str(arguments["auto_scaling_group_name"])
         desired_capacity = int(arguments["desired_capacity"])
-        response = self.autoscaling.describe_auto_scaling_groups(
-            AutoScalingGroupNames=[group_name]
-        )
+        response = self.autoscaling.describe_auto_scaling_groups(AutoScalingGroupNames=[group_name])
         groups = response.get("AutoScalingGroups", [])
         if not groups:
             raise AwsActionError(f"EC2 Auto Scaling group not found: {group_name}")
@@ -247,9 +258,7 @@ class AwsRemediationAdapter:
             raise AwsActionError("RDS instance already uses the requested compute class")
         if _rds_class_capacity_rank(target_class) <= _rds_class_capacity_rank(previous_class):
             raise AwsActionError("RDS remediation must increase the DB instance class size")
-        valid = self.rds.describe_valid_db_instance_modifications(
-            DBInstanceIdentifier=identifier
-        )
+        valid = self.rds.describe_valid_db_instance_modifications(DBInstanceIdentifier=identifier)
         valid_classes = {
             option["DBInstanceClass"]
             for option in valid.get("ValidDBInstanceModificationsMessage", {}).get(
@@ -257,9 +266,7 @@ class AwsRemediationAdapter:
             )
         }
         if valid_classes and target_class not in valid_classes:
-            raise AwsActionError(
-                f"RDS instance class is not a valid modification: {target_class}"
-            )
+            raise AwsActionError(f"RDS instance class is not a valid modification: {target_class}")
         self.rds.modify_db_instance(
             DBInstanceIdentifier=identifier,
             DBInstanceClass=target_class,

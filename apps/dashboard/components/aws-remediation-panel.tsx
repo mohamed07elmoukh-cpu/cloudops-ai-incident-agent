@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, Check, Play, RotateCcw, ShieldCheck, TerminalSquare, X } from "lucide-react";
+import { AlertTriangle, Calculator, Check, Play, RotateCcw, ShieldCheck, TerminalSquare, X } from "lucide-react";
 import { useState } from "react";
 
-import { remediateIncident, rollbackRemediation, verifyIncident } from "@/lib/api";
+import { estimateRemediationCost, remediateIncident, rollbackRemediation, verifyIncident } from "@/lib/api";
 import type { Incident, RemediationRequest } from "@/lib/types";
 
 type FieldDefinition = {
@@ -87,19 +87,26 @@ export function AwsRemediationPanel({
     definition?.verificationDefault ?? "0",
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const parameters = () => Object.fromEntries(
+    definition.fields.map((field) => {
+      const raw = values[field.name] ?? field.defaultValue(incident);
+      const value = field.kind === "integer" ? Number(raw) : field.kind === "boolean" ? raw === "true" : raw;
+      return [field.name, value];
+    }),
+  );
+  const pricing = useMutation({
+    mutationFn: () => estimateRemediationCost(incident.id, {
+      runbook_name: definition.runbook,
+      parameters: parameters(),
+    }),
+    onSuccess: (estimate) => setCostEstimate(String(estimate.monthly_delta_usd)),
+  });
   const remediation = useMutation({
     mutationFn: () => {
       if (!definition) throw new Error("Aucun runbook AWS pour ce type d’incident");
-      const parameters = Object.fromEntries(
-        definition.fields.map((field) => {
-          const raw = values[field.name] ?? field.defaultValue(incident);
-          const value = field.kind === "integer" ? Number(raw) : field.kind === "boolean" ? raw === "true" : raw;
-          return [field.name, value];
-        }),
-      );
       const request: RemediationRequest = {
         runbook_name: definition.runbook,
-        parameters,
+        parameters: parameters(),
         estimated_monthly_cost_delta_usd: Number(costEstimate),
       };
       if (approvedBy) request.approved_by = approvedBy;
@@ -146,10 +153,12 @@ export function AwsRemediationPanel({
             <label className="field" key={field.name}>{field.label}<input className="input" type={field.kind === "integer" ? "number" : "text"} value={values[field.name] ?? field.defaultValue(incident)} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} /></label>
           ))}
           <label className="field">Coût mensuel supplémentaire estimé (USD)<input className="input" type="number" min="0" value={costEstimate} onChange={(event) => setCostEstimate(event.target.value)} /></label>
+          <button className="button" type="button" disabled={pricing.isPending} onClick={() => pricing.mutate()}><Calculator size={14} />{pricing.isPending ? "Calcul en cours…" : "Estimer le coût"}</button>
+          {pricing.data && <div className="notice"><strong>+{pricing.data.monthly_delta_usd.toFixed(2)} {pricing.data.currency}/mois</strong> · {pricing.data.source}<br />{pricing.data.assumptions.join(" · ")}</div>}
           {definition.approvalRequired && <label className="field">Approbateur<input className="input" type="email" placeholder="operator@example.com" value={approvedBy} onChange={(event) => setApprovedBy(event.target.value)} /></label>}
           <button className="button primary" disabled={!canRemediate || remediation.isPending || (definition.approvalRequired && !approvedBy)} onClick={() => setConfirmOpen(true)}><Play size={14} />{remediation.isPending ? "Exécution…" : "Lancer le runbook"}</button>
           {canVerify && <form className="verify-form" onSubmit={(event) => { event.preventDefault(); verification.mutate(); }}><input className="input" aria-label={`Valeur ${definition.verificationMetric} de vérification`} type="number" value={verificationValue} onChange={(event) => setVerificationValue(event.target.value)} /><button className="button" disabled={verification.isPending}><Check size={14} />Vérifier</button></form>}
-          {(remediation.error || verification.error || rollback.error) && <div className="notice error">{(remediation.error ?? verification.error ?? rollback.error)?.message}</div>}
+          {(pricing.error || remediation.error || verification.error || rollback.error) && <div className="notice error">{(pricing.error ?? remediation.error ?? verification.error ?? rollback.error)?.message}</div>}
         </div>
       </div>
     </section>

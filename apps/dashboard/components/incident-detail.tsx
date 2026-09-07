@@ -1,13 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertTriangle, ArrowLeft, Braces, Check, CircleDot, FileClock, Gauge, Play, RefreshCw, ShieldCheck, TerminalSquare, X } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, BrainCircuit, Braces, Check, CircleDot, FileClock, Gauge, Play, RefreshCw, ShieldCheck, TerminalSquare, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { AwsRemediationPanel } from "@/components/aws-remediation-panel";
 import { SeverityBadge, StatusBadge } from "@/components/badges";
-import { formatDate, getIncident, getIncidentEvents, getIncidentTimeline, remediateIncident, verifyIncident } from "@/lib/api";
+import { formatDate, getCorrelatedIncidents, getIncident, getIncidentEvents, getIncidentTimeline, remediateIncident, verifyIncident } from "@/lib/api";
 import type { TimelineEntry } from "@/lib/types";
 
 function TimelineIcon({ kind }: { kind: TimelineEntry["kind"] }) {
@@ -22,6 +22,7 @@ export function IncidentDetail({ id }: { id: string }) {
   const incident = useQuery({ queryKey: ["incident", id], queryFn: () => getIncident(id), refetchInterval: 5_000 });
   const events = useQuery({ queryKey: ["incident-events", id], queryFn: () => getIncidentEvents(id), refetchInterval: 5_000 });
   const timeline = useQuery({ queryKey: ["incident-timeline", id], queryFn: () => getIncidentTimeline(id), refetchInterval: 5_000 });
+  const correlated = useQuery({ queryKey: ["incident-correlated", id], queryFn: () => getCorrelatedIncidents(id), refetchInterval: 5_000 });
   const invalidate = async () => { await Promise.all([client.invalidateQueries({ queryKey: ["incident", id] }), client.invalidateQueries({ queryKey: ["incident-timeline", id] }), client.invalidateQueries({ queryKey: ["statistics"] }), client.invalidateQueries({ queryKey: ["incidents"] })]); };
   const remediation = useMutation({ mutationFn: () => remediateIncident(id), onSuccess: async () => { setConfirmOpen(false); await invalidate(); } });
   const verification = useMutation({ mutationFn: () => verifyIncident(id, Number(cpuValue)), onSuccess: invalidate });
@@ -36,6 +37,7 @@ export function IncidentDetail({ id }: { id: string }) {
     <div className="detail-grid">
       <div className="detail-main">
         <section className="card"><div className="card-header"><h2>Informations générales</h2><Activity size={17} className="subtle" /></div><div className="card-body"><p style={{ marginTop: 0, lineHeight: 1.65, color: "#475467" }}>{item.description}</p><dl className="definition-grid"><div className="definition-item"><dt>Type</dt><dd>{item.incident_type}</dd></div><div className="definition-item"><dt>Détecté le</dt><dd>{formatDate(item.detected_at)}</dd></div><div className="definition-item"><dt>Correlation key</dt><dd className="mono">{item.correlation_key}</dd></div><div className="definition-item"><dt>Résolu le</dt><dd>{formatDate(item.resolved_at)}</dd></div><div className="definition-item"><dt>Tentative de remédiation</dt><dd>{item.remediation_attempted ? "Oui" : "Non"}</dd></div><div className="definition-item"><dt>Échecs de vérification</dt><dd>{item.verification_failures} / 3</dd></div></dl></div></section>
+        {item.probable_root_cause && <section className="card"><div className="card-header"><div><h2>Diagnostic automatique</h2><span className="subtle">Analyse déterministe fondée sur les preuves</span></div><BrainCircuit size={17} className="subtle" /></div><div className="card-body"><div className="runbook"><div className="runbook-name">Cause probable <span className="mono">{Math.round((item.diagnosis_confidence ?? 0) * 100)}% confiance</span></div><p>{item.probable_root_cause}</p><p className="subtle">{item.diagnosis_summary}</p></div><div className="metric-top"><span>Groupe : <span className="mono">{item.correlation_group}</span></span><span>{correlated.data?.length ?? 1} incident(s) lié(s)</span></div>{correlated.data && correlated.data.length > 1 && <div className="action-stack" style={{ marginTop: 12 }}>{correlated.data.filter((related) => related.id !== item.id).map((related) => <Link className="text-link" href={`/incidents/${related.id}`} key={related.id}>{related.incident_type} · {related.source}</Link>)}</div>}</div></section>}
         <section className="card"><div className="card-header"><div><h2>Chronologie</h2><span className="subtle">Cycle de vie et signaux associés</span></div><FileClock size={17} className="subtle" /></div><div className="card-body timeline">{timeline.data?.map((entry, index) => <div className="timeline-item" key={`${entry.timestamp}-${index}`}><TimelineIcon kind={entry.kind} /><div className="timeline-content"><div className="timeline-title"><span>{entry.title}</span><time className="timeline-time">{formatDate(entry.timestamp)}</time></div>{entry.status && <div style={{ marginTop: 7 }}><span className="mono muted">{entry.status}</span></div>}<div className="timeline-detail">{Object.entries(entry.detail).map(([key, value]) => <span key={key} style={{ marginRight: 12 }}>{key}: <span className="mono">{String(value)}</span></span>)}</div></div></div>) ?? <span className="muted">Chargement…</span>}</div></section>
         <section className="card"><div className="card-header"><div><h2>Événements CloudEvent</h2><span className="subtle">Traçabilité du pipeline événementiel</span></div><Braces size={17} className="subtle" /></div><div className="table-scroll"><table><thead><tr><th>Type</th><th>Event ID</th><th>Trace ID</th><th>Traitement</th></tr></thead><tbody>{events.data?.map((event) => <tr key={event.event_id}><td>{event.event_type}</td><td className="mono">{event.event_id.slice(0, 13)}…</td><td className="mono">{event.trace_id.slice(0, 13)}…</td><td><span className="badge resolved">{event.status}</span></td></tr>)}</tbody></table>{events.data?.length === 0 && <div className="empty-state">Aucun CloudEvent lié à cet incident.</div>}</div></section>
       </div>

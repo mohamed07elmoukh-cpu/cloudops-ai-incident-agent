@@ -28,6 +28,13 @@ variable "worker_role_name" {
   nullable    = true
 }
 
+variable "remediation_role_name" {
+  description = "Optional existing API role that receives read-only AWS pricing prerequisites."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "message_retention_seconds" {
   description = "Retention period for incident messages."
   type        = number

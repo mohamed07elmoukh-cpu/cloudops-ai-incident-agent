@@ -57,4 +57,5 @@ class AwsResourceMetricPayload(BaseModel):
     aws_account_id: str = Field(min_length=1, max_length=32)
     aws_region: str = Field(min_length=1, max_length=64)
     dimensions: dict[str, str] = Field(default_factory=dict)
+    correlation_group: str = Field(min_length=1, max_length=255)
     raw_event: dict[str, Any]

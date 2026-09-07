@@ -27,12 +27,18 @@ services:
       DATABASE_URL: postgresql+psycopg://cloudops:cloudops@postgres:5432/cloudops
       RUNBOOK_DIRECTORY: /app/runbooks
       AWS_ENDPOINT_URL: http://localstack:4566
-      AWS_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       INCIDENT_QUEUE_URL: http://localstack:4566/queue/us-east-1/000000000000/cloudops-incidents
       INCIDENT_DLQ_URL: http://localstack:4566/queue/us-east-1/000000000000/cloudops-incidents-dlq
       WORKER_HEALTH_URL: http://incident-worker:8002/health
+      CLOUDWATCH_METRICS_MODE: ${CLOUDWATCH_METRICS_MODE:-demo}
+      AWS_PRICING_MODE: ${AWS_PRICING_MODE:-demo}
+      CLOUDOPS_EC2_ASG_NAME: ${CLOUDOPS_EC2_ASG_NAME:-api-production-asg}
+      CLOUDOPS_DYNAMODB_TABLE_NAME: ${CLOUDOPS_DYNAMODB_TABLE_NAME:-orders}
+      CLOUDOPS_RDS_INSTANCE_ID: ${CLOUDOPS_RDS_INSTANCE_ID:-orders-db}
       REMEDIATION_MODE: simulated
       REMEDIATION_MAX_MONTHLY_COST_DELTA_USD: "500"
     ports:

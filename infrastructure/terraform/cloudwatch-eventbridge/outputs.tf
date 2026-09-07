@@ -23,3 +23,8 @@ output "worker_policy_arn" {
   description = "Attach this policy to the incident worker role if worker_role_name was omitted."
   value       = aws_iam_policy.worker_queue.arn
 }
+
+output "pricing_estimator_policy_arn" {
+  description = "Attach this policy to the API metrics/remediation role if remediation_role_name was omitted."
+  value       = aws_iam_policy.pricing_estimator.arn
+}

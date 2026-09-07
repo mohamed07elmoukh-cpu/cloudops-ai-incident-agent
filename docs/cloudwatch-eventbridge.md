@@ -48,7 +48,9 @@ terraform output
 
 Edit `terraform.tfvars` first. `worker_role_name` can reference an existing ECS,
 EKS, or EC2 workload role. If it is omitted, attach the `worker_policy_arn`
-output to the role yourself.
+output to the role yourself. The generated worker policy includes
+`cloudwatch:ListTagsForResource` for `cloudops-*` alarms so the worker can read
+the correlation tag.
 
 ## 2. Run the worker against AWS
 
@@ -60,6 +62,7 @@ LocalStack.
 $env:AWS_REGION = "eu-west-1"
 $env:INCIDENT_QUEUE_URL = terraform output -raw incident_queue_url
 $env:DATABASE_URL = "postgresql+psycopg://USER:PASSWORD@HOST:5432/cloudops"
+$env:AWS_CORRELATION_TAG_KEY = "cloudops:service"
 Remove-Item Env:AWS_ENDPOINT_URL -ErrorAction SilentlyContinue
 alembic upgrade head
 python apps/incident-worker/worker_main.py
@@ -68,6 +71,25 @@ python apps/incident-worker/worker_main.py
 For a local operator session, set `AWS_PROFILE` before starting the worker. Its
 health and Prometheus endpoints are `http://localhost:8002/health` and
 `http://localhost:8002/metrics`.
+
+## Live infrastructure charts
+
+The local Compose stack uses an explicit animated demo dataset. To connect the
+dashboard API to real CloudWatch metrics, configure the API process:
+
+```powershell
+$env:CLOUDWATCH_METRICS_MODE = "aws"
+$env:AWS_REGION = "eu-west-1"
+$env:CLOUDOPS_EC2_ASG_NAME = "api-production-asg"
+$env:CLOUDOPS_DYNAMODB_TABLE_NAME = "orders"
+$env:CLOUDOPS_RDS_INSTANCE_ID = "orders-db"
+```
+
+The API batches eleven metric queries with `cloudwatch:GetMetricData` and
+refreshes the browser view every eight seconds. Standard AWS service metrics
+still arrive at their native CloudWatch resolution, commonly one minute. The
+API role also needs `rds:DescribeDBInstances` to display the current RDS class.
+The Terraform API/remediation policy contains both permissions.
 
 ## 3. Create compatible alarms
 
@@ -85,7 +107,8 @@ aws cloudwatch put-metric-alarm `
   --datapoints-to-alarm 2 `
   --threshold 80 `
   --comparison-operator GreaterThanThreshold `
-  --treat-missing-data notBreaching
+  --treat-missing-data notBreaching `
+  --tags Key=cloudops:service,Value=checkout
 ```
 
 DynamoDB provisioned-throughput example:
@@ -101,7 +124,8 @@ aws cloudwatch put-metric-alarm `
   --evaluation-periods 1 `
   --threshold 1 `
   --comparison-operator GreaterThanOrEqualToThreshold `
-  --treat-missing-data notBreaching
+  --treat-missing-data notBreaching `
+  --tags Key=cloudops:service,Value=checkout
 ```
 
 RDS low-storage example (10 GiB in bytes):
@@ -118,7 +142,8 @@ aws cloudwatch put-metric-alarm `
   --datapoints-to-alarm 2 `
   --threshold 10737418240 `
   --comparison-operator LessThanThreshold `
-  --treat-missing-data missing
+  --treat-missing-data missing `
+  --tags Key=cloudops:service,Value=checkout
 ```
 
 ## 4. Verify end to end
@@ -137,6 +162,11 @@ Invoke-RestMethod http://localhost:8000/api/incidents
 The worker stores the complete EventBridge message in the incident evidence.
 Replaying the same message is safe because its AWS event ID becomes the unique
 `processed_events.event_id`.
+
+Alarms sharing `cloudops:service=checkout` retain separate resource incidents
+and runbooks, but receive the same correlation group and automatic diagnosis.
+The diagnosis records its metric snapshot and confidence and is refreshed as
+EC2, DynamoDB, or RDS signals arrive inside the 30-minute window.
 
 An unsupported metric or an alarm event without an evaluated datapoint is not
 acknowledged and eventually reaches the consumer DLQ. Inspect the EventBridge

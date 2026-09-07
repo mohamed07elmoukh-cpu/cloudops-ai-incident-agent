@@ -44,4 +44,3 @@ def create_worker_health_app(
         )
 
     return app
-

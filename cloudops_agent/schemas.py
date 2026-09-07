@@ -33,6 +33,14 @@ class RemediationRequest(BaseModel):
     estimated_monthly_cost_delta_usd: float | None = Field(default=None, ge=0)
 
 
+class CostEstimateRead(BaseModel):
+    monthly_delta_usd: float = Field(ge=0)
+    currency: str
+    source: str
+    assumptions: list[str]
+    line_items: list[dict[str, Any]]
+
+
 class RollbackRequest(BaseModel):
     execution_id: uuid.UUID
     approved_by: str | None = Field(default=None, min_length=1, max_length=255)
@@ -47,6 +55,7 @@ class ResourceMetricEvaluationRequest(BaseModel):
     condition: Literal["above", "below"] = "above"
     timestamp: datetime
     severity: Severity = Severity.HIGH
+    correlation_group: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 class EvidenceRead(BaseModel):
@@ -86,6 +95,12 @@ class IncidentRead(BaseModel):
     detected_at: datetime
     resolved_at: datetime | None
     correlation_key: str
+    correlation_group: str | None
+    diagnosis_summary: str | None
+    probable_root_cause: str | None
+    diagnosis_confidence: float | None
+    diagnosis_evidence: list[dict[str, Any]]
+    diagnosed_at: datetime | None
     remediation_attempted: bool
     verification_failures: int
     evidence: list[EvidenceRead] = Field(default_factory=list)
@@ -135,6 +150,48 @@ class IncidentStatistics(BaseModel):
     by_status: dict[str, int]
     by_severity: dict[str, int]
     daily_trend: list[DailyIncidentPoint]
+
+
+class LiveMetricSeries(BaseModel):
+    key: str
+    label: str
+    unit: str
+    color: str
+
+
+class LiveMetricPoint(BaseModel):
+    timestamp: datetime
+    values: dict[str, float]
+
+
+class LiveMetricMarker(BaseModel):
+    timestamp: datetime
+    kind: Literal["detection", "remediation", "rollback"]
+    label: str
+    incident_id: uuid.UUID | None = None
+    source: Literal["audit", "demo"]
+
+
+class LiveResourceMetrics(BaseModel):
+    resource_type: Literal["EC2", "DYNAMODB", "RDS"]
+    resource_id: str
+    title: str
+    subtitle: str
+    status: Literal["healthy", "attention"]
+    metadata: dict[str, str]
+    series: list[LiveMetricSeries]
+    points: list[LiveMetricPoint]
+    markers: list[LiveMetricMarker]
+
+
+class LiveMetricsRead(BaseModel):
+    mode: Literal["aws", "demo"]
+    region: str
+    generated_at: datetime
+    window_minutes: int
+    period_seconds: int
+    refresh_seconds: int
+    resources: list[LiveResourceMetrics]
 
 
 class SystemComponentHealth(BaseModel):

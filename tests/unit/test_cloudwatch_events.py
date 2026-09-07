@@ -75,7 +75,7 @@ def cloudwatch_event(
 
 
 def test_normalizes_native_ec2_alarm_event() -> None:
-    event = cloudwatch_alarm_to_cloud_event(cloudwatch_event())
+    event = cloudwatch_alarm_to_cloud_event(cloudwatch_event(), service_key="Checkout")
 
     assert event.event_type == "AWS_RESOURCE_THRESHOLD_BREACHED"
     assert str(event.event_id) == "1da8c9e8-2d9b-4e45-b6fa-4fe617bd9f64"
@@ -84,6 +84,7 @@ def test_normalizes_native_ec2_alarm_event() -> None:
     assert event.payload["resource_id"] == "api-production-asg"
     assert event.payload["value"] == 92
     assert event.payload["threshold"] == 80
+    assert event.payload["correlation_group"] == "service:checkout"
 
 
 def test_normalizes_dynamodb_and_rds_alarm_dimensions() -> None:

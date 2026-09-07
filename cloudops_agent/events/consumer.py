@@ -18,6 +18,7 @@ from cloudops_agent.events.metrics import (
     EVENTS_RECEIVED,
     INCIDENTS_CREATED,
 )
+from cloudops_agent.events.models import CloudEventEnvelope
 from cloudops_agent.events.processor import IncidentEventProcessor
 from cloudops_agent.events.queue import EventQueue, QueueMessage
 
@@ -48,18 +49,20 @@ class IncidentWorker:
         processor: IncidentEventProcessor | None = None,
         state: WorkerLoopState | None = None,
         batch_size: int = 5,
+        event_decoder: Callable[[str], CloudEventEnvelope] | None = None,
     ) -> None:
         self.queue = queue
         self.session_factory = session_factory
         self.processor = processor or IncidentEventProcessor()
         self.state = state or WorkerLoopState()
         self.batch_size = max(1, min(batch_size, 10))
+        self.event_decoder = event_decoder or decode_event_message
 
     def process_message(self, message: QueueMessage) -> bool:
         EVENTS_RECEIVED.inc()
         started = time.monotonic()
         try:
-            event = decode_event_message(message.body)
+            event = self.event_decoder(message.body)
             with self.session_factory() as session:
                 result = self.processor.process(event, session)
             if result.duplicate:

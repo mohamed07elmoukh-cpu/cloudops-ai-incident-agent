@@ -2,6 +2,7 @@ aws_region        = "eu-west-1"
 name_prefix       = "cloudops-prod"
 alarm_name_prefix = "cloudops-"
 worker_role_name  = "cloudops-incident-worker-role"
+remediation_role_name = "cloudops-api-role"
 
 tags = {
   Environment = "production"

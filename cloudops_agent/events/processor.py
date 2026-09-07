@@ -107,6 +107,7 @@ class IncidentEventProcessor:
             condition=payload.condition,
             timestamp=event.occurred_at,
             severity=event.severity,
+            correlation_group=payload.correlation_group,
         )
         try:
             detection = DetectionService(session).evaluate_resource(

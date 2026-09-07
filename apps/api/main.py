@@ -16,7 +16,14 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from sqlalchemy import Select, func, or_, select, text
 from sqlalchemy.orm import Session, selectinload
 
-from cloudops_agent.adapters.aws import AwsRemediationAdapter
+from cloudops_agent.adapters.aws import (
+    AwsPricingError,
+    AwsPricingEstimator,
+    AwsRemediationAdapter,
+    CloudWatchMetricsError,
+    CloudWatchMetricsReader,
+    DemoPricingEstimator,
+)
 from cloudops_agent.database import get_session
 from cloudops_agent.detection import DetectionService
 from cloudops_agent.events.alertmanager import (
@@ -45,10 +52,13 @@ from cloudops_agent.remediation.executor import (
 )
 from cloudops_agent.remediation.runbooks import InvalidRunbookError, RunbookLoader
 from cloudops_agent.schemas import (
+    CostEstimateRead,
     DailyIncidentPoint,
     DetectionEvaluationResponse,
     IncidentRead,
     IncidentStatistics,
+    LiveMetricMarker,
+    LiveMetricsRead,
     MetricEvaluationRequest,
     ProcessedEventRead,
     RemediationRequest,
@@ -81,6 +91,11 @@ def get_event_queue() -> EventQueue:
 QueueDependency = Annotated[EventQueue, Depends(get_event_queue)]
 
 
+@lru_cache
+def get_cloudwatch_metrics_reader() -> CloudWatchMetricsReader:
+    return CloudWatchMetricsReader()
+
+
 def _incident_query() -> Select[tuple[Incident]]:
     return select(Incident).options(
         selectinload(Incident.evidence),
@@ -93,6 +108,26 @@ def _get_incident_or_404(session: Session, incident_id: uuid.UUID) -> Incident:
     if incident is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident not found")
     return incident
+
+
+def _server_cost_estimate(runbook_name: str, parameters: dict[str, object]) -> CostEstimateRead:
+    runbook = RunbookLoader(RUNBOOK_DIRECTORY).load(runbook_name)
+    resolved = SimulatedRemediationExecutor._resolve_parameters(runbook, parameters)
+    remediation_mode = os.getenv("REMEDIATION_MODE", "simulated").lower()
+    pricing_mode = (
+        "aws" if remediation_mode == "aws" else os.getenv("AWS_PRICING_MODE", "demo").lower()
+    )
+    if pricing_mode not in {"aws", "demo"}:
+        raise AwsPricingError("AWS_PRICING_MODE must be either 'demo' or 'aws'")
+    estimator = AwsPricingEstimator() if pricing_mode == "aws" else DemoPricingEstimator()
+    estimate = estimator.estimate(runbook.steps[0].action, resolved)
+    return CostEstimateRead(
+        monthly_delta_usd=estimate.monthly_delta_usd,
+        currency=estimate.currency,
+        source=estimate.source,
+        assumptions=estimate.assumptions,
+        line_items=estimate.line_items,
+    )
 
 
 @app.get("/health")
@@ -136,6 +171,7 @@ def list_incidents(
                 Incident.description.ilike(pattern),
                 Incident.source.ilike(pattern),
                 Incident.correlation_key.ilike(pattern),
+                Incident.correlation_group.ilike(pattern),
             )
         )
 
@@ -153,6 +189,21 @@ def list_incidents(
     response.headers["X-Page"] = str(page)
     response.headers["X-Page-Size"] = str(page_size)
     return list(session.scalars(query).unique())
+
+
+@app.get("/api/incidents/{incident_id}/correlated", response_model=list[IncidentRead])
+def get_correlated_incidents(incident_id: uuid.UUID, session: SessionDependency) -> list[Incident]:
+    incident = _get_incident_or_404(session, incident_id)
+    if not incident.correlation_group:
+        return [incident]
+    return list(
+        session.scalars(
+            _incident_query()
+            .where(Incident.correlation_group == incident.correlation_group)
+            .order_by(Incident.detected_at.desc())
+            .limit(100)
+        ).unique()
+    )
 
 
 @app.get("/api/incidents/{incident_id}", response_model=IncidentRead)
@@ -294,6 +345,112 @@ def get_statistics(session: SessionDependency) -> IncidentStatistics:
     )
 
 
+def _metric_resource_type(incident_type: str) -> str | None:
+    if incident_type.startswith("EC2_"):
+        return "EC2"
+    if incident_type.startswith("DYNAMODB_"):
+        return "DYNAMODB"
+    if incident_type.startswith("RDS_"):
+        return "RDS"
+    return None
+
+
+def _live_metric_markers(
+    session: Session, start_time: datetime, resource_ids: dict[str, str]
+) -> dict[str, list[LiveMetricMarker]]:
+    markers: dict[str, list[LiveMetricMarker]] = {
+        "EC2": [],
+        "DYNAMODB": [],
+        "RDS": [],
+    }
+    incidents = list(
+        session.scalars(
+            _incident_query().where(
+                or_(
+                    Incident.detected_at >= start_time,
+                    Incident.remediation_executions.any(
+                        RemediationExecution.started_at >= start_time
+                    ),
+                )
+            )
+        ).unique()
+    )
+    for incident in incidents:
+        resource_type = _metric_resource_type(incident.incident_type)
+        if resource_type is None or incident.source != resource_ids[resource_type]:
+            continue
+        markers[resource_type].append(
+            LiveMetricMarker(
+                timestamp=incident.detected_at,
+                kind="detection",
+                label="Incident détecté",
+                incident_id=incident.id,
+                source="audit",
+            )
+        )
+        for execution in incident.remediation_executions:
+            if execution.started_at >= start_time:
+                markers[resource_type].append(
+                    LiveMetricMarker(
+                        timestamp=execution.started_at,
+                        kind="remediation",
+                        label=f"Runbook {execution.runbook_name}",
+                        incident_id=incident.id,
+                        source="audit",
+                    )
+                )
+            rolled_back_at = execution.output.get("rolled_back_at")
+            if not rolled_back_at:
+                continue
+            try:
+                rollback_time = datetime.fromisoformat(str(rolled_back_at))
+            except ValueError:
+                continue
+            if rollback_time.tzinfo is None:
+                rollback_time = rollback_time.replace(tzinfo=UTC)
+            if rollback_time >= start_time:
+                markers[resource_type].append(
+                    LiveMetricMarker(
+                        timestamp=rollback_time,
+                        kind="rollback",
+                        label="Rollback exécuté",
+                        incident_id=incident.id,
+                        source="audit",
+                    )
+                )
+    for resource_markers in markers.values():
+        resource_markers.sort(key=lambda marker: marker.timestamp)
+    return markers
+
+
+@app.get("/api/metrics/live", response_model=LiveMetricsRead)
+def get_live_metrics(
+    session: SessionDependency,
+    window_minutes: Annotated[int, Query(ge=15, le=180)] = 60,
+) -> LiveMetricsRead:
+    reader = get_cloudwatch_metrics_reader()
+    try:
+        payload = reader.snapshot(window_minutes)
+    except CloudWatchMetricsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CloudWatch metrics are temporarily unavailable",
+        ) from exc
+    resources = payload["resources"]
+    resource_ids = {
+        str(resource["resource_type"]): str(resource["resource_id"]) for resource in resources
+    }
+    start_time = datetime.now(UTC) - timedelta(minutes=window_minutes)
+    audit_markers = _live_metric_markers(session, start_time, resource_ids)
+    for resource in resources:
+        resource_type = str(resource["resource_type"])
+        if audit_markers[resource_type]:
+            resource["markers"] = [
+                marker.model_dump(mode="json") for marker in audit_markers[resource_type]
+            ]
+    return LiveMetricsRead.model_validate(payload)
+
+
 def _worker_health() -> tuple[bool, str | None]:
     url = os.getenv("WORKER_HEALTH_URL", "http://localhost:8002/health")
     try:
@@ -309,9 +466,7 @@ def _worker_health() -> tuple[bool, str | None]:
 def get_system_health(
     response: Response, session: SessionDependency, queue: QueueDependency
 ) -> SystemHealthRead:
-    components: dict[str, SystemComponentHealth] = {
-        "api": SystemComponentHealth(status="healthy")
-    }
+    components: dict[str, SystemComponentHealth] = {"api": SystemComponentHealth(status="healthy")}
     try:
         session.execute(text("SELECT 1"))
         components["postgresql"] = SystemComponentHealth(status="healthy")
@@ -432,7 +587,15 @@ def remediate_incident(
             else loader.find_for_incident(incident.incident_type)
         )
         executor: SimulatedRemediationExecutor
-        if runbook.executor == "aws" and os.getenv("REMEDIATION_MODE", "simulated") == "aws":
+        real_aws = runbook.executor == "aws" and os.getenv("REMEDIATION_MODE", "simulated") == "aws"
+        estimated_cost = request.estimated_monthly_cost_delta_usd
+        if real_aws:
+            if incident.incident_type not in runbook.incident_types:
+                raise RunbookNotAllowedError(
+                    f"runbook {runbook.name} does not support {incident.incident_type}"
+                )
+            estimate = _server_cost_estimate(runbook.name, request.parameters)
+            estimated_cost = estimate.monthly_delta_usd
             executor = AwsRemediationExecutor(session, AwsRemediationAdapter())
         else:
             executor = SimulatedRemediationExecutor(session)
@@ -442,7 +605,7 @@ def remediate_incident(
             parameters=request.parameters,
             idempotency_key=request.idempotency_key,
             approved_by=request.approved_by,
-            estimated_monthly_cost_delta_usd=request.estimated_monthly_cost_delta_usd,
+            estimated_monthly_cost_delta_usd=estimated_cost,
         )
     except (
         DuplicateRemediationError,
@@ -452,11 +615,46 @@ def remediate_incident(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ApprovalRequiredError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except (InvalidRunbookError, RunbookNotAllowedError, RemediationError) as exc:
+    except (AwsPricingError, InvalidRunbookError, RunbookNotAllowedError, RemediationError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
     return _get_incident_or_404(session, incident_id)
+
+
+@app.post(
+    "/api/incidents/{incident_id}/cost-estimate",
+    response_model=CostEstimateRead,
+)
+def estimate_incident_remediation_cost(
+    incident_id: uuid.UUID,
+    request: RemediationRequest,
+    session: SessionDependency,
+) -> CostEstimateRead:
+    incident = _get_incident_or_404(session, incident_id)
+    try:
+        loader = RunbookLoader(RUNBOOK_DIRECTORY)
+        runbook = (
+            loader.load(request.runbook_name)
+            if request.runbook_name
+            else loader.find_for_incident(incident.incident_type)
+        )
+        if runbook.executor != "aws":
+            raise AwsPricingError("cost estimation is available only for AWS runbooks")
+        if incident.incident_type not in runbook.incident_types:
+            raise RunbookNotAllowedError(
+                f"runbook {runbook.name} does not support {incident.incident_type}"
+            )
+        return _server_cost_estimate(runbook.name, request.parameters)
+    except (
+        AwsPricingError,
+        InvalidRunbookError,
+        RemediationError,
+        RunbookNotAllowedError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @app.post("/api/incidents/{incident_id}/rollback", response_model=IncidentRead)

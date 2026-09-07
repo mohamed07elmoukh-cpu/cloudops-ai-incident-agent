@@ -1,7 +1,9 @@
 import type {
+  CostEstimate,
   Incident,
   IncidentFilters,
   IncidentPage,
+  LiveMetrics,
   ProcessedEvent,
   RemediationRequest,
   Statistics,
@@ -43,11 +45,15 @@ export async function getIncidents(filters: IncidentFilters = {}): Promise<Incid
 }
 
 export const getIncident = (id: string) => request<Incident>(`/incidents/${id}`);
+export const getCorrelatedIncidents = (id: string) =>
+  request<Incident[]>(`/incidents/${id}/correlated`);
 export const getIncidentEvents = (id: string) =>
   request<ProcessedEvent[]>(`/incidents/${id}/events`);
 export const getIncidentTimeline = (id: string) =>
   request<TimelineEntry[]>(`/incidents/${id}/timeline`);
 export const getStatistics = () => request<Statistics>("/statistics");
+export const getLiveMetrics = (windowMinutes = 60) =>
+  request<LiveMetrics>(`/metrics/live?window_minutes=${windowMinutes}`);
 export async function getSystemHealth(): Promise<SystemHealth> {
   const response = await fetch(`${API_PREFIX}/system/health`, { cache: "no-store" });
   if (response.status !== 200 && response.status !== 503) {
@@ -61,6 +67,12 @@ export const remediateIncident = (
   remediation: RemediationRequest = { runbook_name: "scale_service" },
 ) =>
   request<Incident>(`/incidents/${id}/remediate`, {
+    method: "POST",
+    body: JSON.stringify(remediation),
+  });
+
+export const estimateRemediationCost = (id: string, remediation: RemediationRequest) =>
+  request<CostEstimate>(`/incidents/${id}/cost-estimate`, {
     method: "POST",
     body: JSON.stringify(remediation),
   });

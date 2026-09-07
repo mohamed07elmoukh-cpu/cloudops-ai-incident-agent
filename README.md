@@ -34,6 +34,12 @@ The following vertical capabilities are implemented:
 - `Faulty Service -> Prometheus -> Alertmanager -> webhook -> LocalStack SQS
   -> incident worker -> PostgreSQL`
 - `CloudWatch Alarm -> EventBridge -> AWS SQS -> incident worker -> PostgreSQL`
+- Tag-based EC2, DynamoDB, and RDS correlation with an evidence-backed automatic
+  diagnosis and confidence score.
+- Server-side incremental cost estimation using AWS Pricing before real
+  capacity remediation.
+- Near-real-time CloudWatch charts for EC2, DynamoDB, and RDS with detection,
+  remediation, and rollback markers.
 - A responsive Next.js operations dashboard for incident monitoring,
   remediation, verification, event timelines, and platform health.
 - Policy-guarded EC2 Auto Scaling, provisioned DynamoDB throughput, RDS

@@ -3,4 +3,3 @@
 from cloudops_agent.verification.service import VerificationService
 
 __all__ = ["VerificationService"]
-

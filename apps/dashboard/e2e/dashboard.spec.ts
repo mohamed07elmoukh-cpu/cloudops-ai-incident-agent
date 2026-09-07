@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import type { Incident } from "@/lib/types";
+import type { Incident, LiveMetrics } from "@/lib/types";
 
 const incident: Incident = {
   id: "20662f5b-cf00-4f7e-a3b6-d59570e41800",
@@ -13,16 +13,70 @@ const incident: Incident = {
   detected_at: "2026-09-02T20:00:00Z",
   resolved_at: null,
   correlation_key: "demo-service:cpu-saturation",
+  correlation_group: null,
+  diagnosis_summary: null,
+  probable_root_cause: null,
+  diagnosis_confidence: null,
+  diagnosis_evidence: [],
+  diagnosed_at: null,
   remediation_attempted: false,
   verification_failures: 0,
   evidence: [{ incident_id: "20662f5b-cf00-4f7e-a3b6-d59570e41800", metric_name: "cpu_usage_percent", metric_value: 92, threshold: 85, timestamp: "2026-09-02T20:00:00Z", raw_data: {} }],
   remediation_executions: [],
 };
 
+const metricTimes = Array.from({ length: 8 }, (_, index) =>
+  new Date(Date.UTC(2026, 8, 2, 19, 53 + index)).toISOString(),
+);
+
+const liveMetrics: LiveMetrics = {
+  mode: "demo",
+  region: "us-east-1",
+  generated_at: "2026-09-02T20:00:00Z",
+  window_minutes: 60,
+  period_seconds: 60,
+  refresh_seconds: 8,
+  resources: [
+    {
+      resource_type: "EC2", resource_id: "api-production-asg", title: "Amazon EC2", subtitle: "Auto Scaling Group", status: "healthy", metadata: {},
+      series: [
+        { key: "cpu", label: "CPU", unit: "%", color: "#0b57d0" },
+        { key: "in_service", label: "Instances actives", unit: "instances", color: "#137333" },
+        { key: "desired", label: "Capacité désirée", unit: "instances", color: "#9334e6" },
+      ],
+      points: metricTimes.map((timestamp, index) => ({ timestamp, values: { cpu: 48 + index, in_service: 3, desired: 4 } })),
+      markers: [{ timestamp: metricTimes[3], kind: "remediation", label: "Capacité augmentée", incident_id: null, source: "demo" }],
+    },
+    {
+      resource_type: "DYNAMODB", resource_id: "orders", title: "Amazon DynamoDB", subtitle: "Table provisionnée", status: "healthy", metadata: {},
+      series: [
+        { key: "consumed_read", label: "RCU consommées", unit: "RCU", color: "#0b57d0" },
+        { key: "provisioned_read", label: "RCU provisionnées", unit: "RCU", color: "#137333" },
+        { key: "consumed_write", label: "WCU consommées", unit: "WCU", color: "#a142f4" },
+        { key: "provisioned_write", label: "WCU provisionnées", unit: "WCU", color: "#f9ab00" },
+        { key: "throttles", label: "Requêtes limitées", unit: "requêtes", color: "#d93025" },
+      ],
+      points: metricTimes.map((timestamp, index) => ({ timestamp, values: { consumed_read: 120 + index, provisioned_read: 200, consumed_write: 60 + index, provisioned_write: 100, throttles: 0 } })),
+      markers: [],
+    },
+    {
+      resource_type: "RDS", resource_id: "orders-db", title: "Amazon RDS", subtitle: "Instance de base de données", status: "healthy", metadata: { instance_class: "db.r6g.large" },
+      series: [
+        { key: "cpu", label: "CPU", unit: "%", color: "#0b57d0" },
+        { key: "free_storage_gib", label: "Stockage libre", unit: "GiB", color: "#137333" },
+        { key: "connections", label: "Connexions", unit: "conn.", color: "#a142f4" },
+      ],
+      points: metricTimes.map((timestamp, index) => ({ timestamp, values: { cpu: 42 + index, free_storage_gib: 32, connections: 80 + index } })),
+      markers: [],
+    },
+  ],
+};
+
 async function mockDashboardApi(page: Page) {
   await page.route("**/backend/api/statistics", (route) => route.fulfill({ json: { total: 3, open: 1, resolved: 2, escalated: 0, active: 1, average_resolution_seconds: 95, by_status: { OPEN: 1, RESOLVED: 2 }, by_severity: { HIGH: 1, MEDIUM: 2 }, daily_trend: Array.from({ length: 14 }, (_, index) => ({ date: new Date(Date.UTC(2026, 7, 20 + index)).toISOString().slice(0, 10), detected: index === 13 ? 1 : 0, resolved: 0 })) } }));
   await page.route("**/backend/api/incidents?*", (route) => route.fulfill({ headers: { "X-Total-Count": "1", "X-Page": "1", "X-Page-Size": "20" }, json: [incident] }));
   await page.route("**/backend/api/system/health", (route) => route.fulfill({ json: { status: "healthy", checked_at: "2026-09-02T20:01:00Z", components: { api: { status: "healthy" }, postgresql: { status: "healthy" }, sqs: { status: "healthy", visible_messages: 0, in_flight_messages: 0 }, worker: { status: "healthy" } } } }));
+  await page.route("**/backend/api/metrics/live?*", (route) => route.fulfill({ json: liveMetrics }));
 }
 
 test("affiche une vue opérationnelle claire", async ({ page }) => {
@@ -31,6 +85,10 @@ test("affiche une vue opérationnelle claire", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Centre de contrôle" })).toBeVisible();
   await expect(page.getByText("Incidents actifs")).toBeVisible();
   await expect(page.getByText("Opérationnel", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Capacité de l’infrastructure" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Amazon EC2" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Amazon DynamoDB" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Amazon RDS" })).toBeVisible();
   await expect(page.getByText(incident.title)).toBeVisible();
   await page.screenshot({ path: "test-results/dashboard-preview.png", fullPage: true });
 });
@@ -39,6 +97,7 @@ test("filtre les incidents et ouvre leur détail", async ({ page }) => {
   await mockDashboardApi(page);
   await page.route(`**/backend/api/incidents/${incident.id}`, (route) => route.fulfill({ json: incident }));
   await page.route(`**/backend/api/incidents/${incident.id}/events`, (route) => route.fulfill({ json: [] }));
+  await page.route(`**/backend/api/incidents/${incident.id}/correlated`, (route) => route.fulfill({ json: [incident] }));
   await page.route(`**/backend/api/incidents/${incident.id}/timeline`, (route) => route.fulfill({ json: [{ timestamp: incident.detected_at, kind: "incident", title: "Incident détecté", status: "OPEN", detail: { source: "demo-service" } }] }));
   await page.goto("/incidents");
   await expect(page.getByRole("heading", { name: "Incidents" })).toBeVisible();
@@ -56,6 +115,9 @@ test("confirme la remédiation puis résout l’incident", async ({ page }) => {
   );
   await page.route(`**/backend/api/incidents/${incident.id}/events`, (route) =>
     route.fulfill({ json: [] }),
+  );
+  await page.route(`**/backend/api/incidents/${incident.id}/correlated`, (route) =>
+    route.fulfill({ json: [current] }),
   );
   await page.route(`**/backend/api/incidents/${incident.id}/timeline`, (route) =>
     route.fulfill({ json: [] }),

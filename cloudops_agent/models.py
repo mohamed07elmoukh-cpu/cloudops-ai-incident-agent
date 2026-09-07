@@ -77,6 +77,14 @@ class Incident(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     correlation_key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    correlation_group: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    diagnosis_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    probable_root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    diagnosis_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    diagnosis_evidence: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    diagnosed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     remediation_attempted: Mapped[bool] = mapped_column(nullable=False, default=False)
     verification_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 

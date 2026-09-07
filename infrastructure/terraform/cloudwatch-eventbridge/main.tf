@@ -2,6 +2,9 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+
 locals {
   common_tags = merge(
     {
@@ -142,6 +145,12 @@ data "aws_iam_policy_document" "worker_queue" {
     ]
     resources = [aws_sqs_queue.incidents.arn]
   }
+
+  statement {
+    sid       = "ReadCloudWatchAlarmCorrelationTag"
+    actions   = ["cloudwatch:ListTagsForResource"]
+    resources = ["arn:${data.aws_partition.current.partition}:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${var.alarm_name_prefix}*"]
+  }
 }
 
 resource "aws_iam_policy" "worker_queue" {
@@ -155,4 +164,37 @@ resource "aws_iam_role_policy_attachment" "worker_queue" {
   count      = var.worker_role_name == null ? 0 : 1
   role       = var.worker_role_name
   policy_arn = aws_iam_policy.worker_queue.arn
+}
+
+data "aws_iam_policy_document" "pricing_estimator" {
+  statement {
+    sid = "ReadCapacityForPricing"
+    actions = [
+      "autoscaling:DescribeAutoScalingGroups",
+      "cloudwatch:GetMetricData",
+      "dynamodb:DescribeTable",
+      "ec2:DescribeLaunchTemplateVersions",
+      "rds:DescribeDBInstances",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "QueryAwsPriceList"
+    actions   = ["pricing:GetProducts"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "pricing_estimator" {
+  name        = "${var.name_prefix}-pricing-estimator"
+  description = "Read-only capacity discovery, CloudWatch metrics, and AWS Price List queries."
+  policy      = data.aws_iam_policy_document.pricing_estimator.json
+  tags        = local.common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "pricing_estimator" {
+  count      = var.remediation_role_name == null ? 0 : 1
+  role       = var.remediation_role_name
+  policy_arn = aws_iam_policy.pricing_estimator.arn
 }

@@ -1,2 +1,5 @@
-"""Evidence collection and AI-assisted root-cause analysis."""
+"""Evidence collection and automatic root-cause analysis."""
 
+from cloudops_agent.diagnosis.service import DiagnosticService
+
+__all__ = ["DiagnosticService"]

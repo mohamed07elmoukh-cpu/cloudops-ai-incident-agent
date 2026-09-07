@@ -37,6 +37,14 @@ export interface RemediationRequest {
   estimated_monthly_cost_delta_usd?: number;
 }
 
+export interface CostEstimate {
+  monthly_delta_usd: number;
+  currency: string;
+  source: string;
+  assumptions: string[];
+  line_items: Array<Record<string, unknown>>;
+}
+
 export interface Incident {
   id: string;
   source: string;
@@ -48,6 +56,12 @@ export interface Incident {
   detected_at: string;
   resolved_at: string | null;
   correlation_key: string;
+  correlation_group: string | null;
+  diagnosis_summary: string | null;
+  probable_root_cause: string | null;
+  diagnosis_confidence: number | null;
+  diagnosis_evidence: Array<Record<string, unknown>>;
+  diagnosed_at: string | null;
   remediation_attempted: boolean;
   verification_failures: number;
   evidence: Evidence[];
@@ -89,6 +103,50 @@ export interface Statistics {
   by_status: Record<string, number>;
   by_severity: Record<string, number>;
   daily_trend: DailyIncidentPoint[];
+}
+
+export type CloudResourceType = "EC2" | "DYNAMODB" | "RDS";
+
+export interface LiveMetricSeries {
+  key: string;
+  label: string;
+  unit: string;
+  color: string;
+}
+
+export interface LiveMetricPoint {
+  timestamp: string;
+  values: Record<string, number>;
+}
+
+export interface LiveMetricMarker {
+  timestamp: string;
+  kind: "detection" | "remediation" | "rollback";
+  label: string;
+  incident_id: string | null;
+  source: "audit" | "demo";
+}
+
+export interface LiveResourceMetrics {
+  resource_type: CloudResourceType;
+  resource_id: string;
+  title: string;
+  subtitle: string;
+  status: "healthy" | "attention";
+  metadata: Record<string, string>;
+  series: LiveMetricSeries[];
+  points: LiveMetricPoint[];
+  markers: LiveMetricMarker[];
+}
+
+export interface LiveMetrics {
+  mode: "aws" | "demo";
+  region: string;
+  generated_at: string;
+  window_minutes: number;
+  period_seconds: number;
+  refresh_seconds: number;
+  resources: LiveResourceMetrics[];
 }
 
 export interface ComponentHealth {

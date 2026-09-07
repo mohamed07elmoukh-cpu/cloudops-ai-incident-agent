@@ -23,8 +23,8 @@ Implemented remediation controls:
 - RDS allocated-storage changes are marked irreversible instead of pretending
   that an unsafe automatic rollback exists.
 
-Production deployment still requires authenticated API callers, a trusted
-server-side pricing source for cost estimates, and IAM policies restricted to
-explicit resource ARNs. The request body currently carries the cost estimate
-and approver identity, so these values must only come from a trusted control
-plane rather than directly from an untrusted user.
+Production deployment still requires authenticated API callers, trusted
+approver identities, and IAM policies restricted to explicit resource ARNs.
+AWS mode replaces the request-body estimate with a server-side AWS Price List
+Query API calculation, so the cost policy no longer trusts a browser-supplied
+amount.

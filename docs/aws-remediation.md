@@ -6,6 +6,11 @@ AWS runbooks use the simulated executor by default. This exercises validation,
 approval, cost, cooldown, audit, verification, and rollback behavior without
 changing AWS resources.
 
+Local Docker deployments also use `AWS_PRICING_MODE=demo` by default. The
+dashboard then returns a deterministic, clearly labelled local estimate and
+does not call EC2, DynamoDB, RDS, or the AWS Price List API. These values are
+useful for demonstrations and policy tests, but are not contractual prices.
+
 Set `REMEDIATION_MODE=aws` only in a protected deployment whose API callers are
 authenticated. The process must use an IAM role or AWS credentials for the
 target account. `AWS_REMEDIATION_ENDPOINT_URL` is optional and intended for a
@@ -17,12 +22,24 @@ The global monthly cost-increase ceiling defaults to USD 500 and can be lowered:
 ```shell
 REMEDIATION_MODE=aws
 REMEDIATION_MAX_MONTHLY_COST_DELTA_USD=250
+AWS_REGION=eu-west-1
+AWS_PRICING_REGION=us-east-1
 ```
 
 The effective ceiling is the smaller of this value and the limit declared by
-the selected runbook. The current API expects a trusted controller or operator
-to supply `estimated_monthly_cost_delta_usd`; a production deployment should
-replace that input with a server-side AWS Pricing/FinOps estimate.
+the selected runbook. In `REMEDIATION_MODE=aws`, the server ignores the cost
+declared by the caller, reads the current resource capacity, and uses the AWS
+Price List Query API to calculate the incremental monthly list price. If no
+unambiguous price is returned, remediation fails closed. Discounts, Savings
+Plans, taxes, support, and data transfer are intentionally excluded.
+
+Preview the estimate before remediation:
+
+```shell
+curl -X POST http://localhost:8000/api/incidents/INCIDENT_ID/cost-estimate \
+  -H "Content-Type: application/json" \
+  -d '{"parameters":{"auto_scaling_group_name":"api-asg","desired_capacity":4}}'
+```
 
 ## Least-privilege permissions
 
@@ -31,12 +48,23 @@ The executor needs only the actions used by enabled runbooks:
 ```text
 autoscaling:DescribeAutoScalingGroups
 autoscaling:SetDesiredCapacity
+ec2:DescribeLaunchTemplateVersions
 dynamodb:DescribeTable
 dynamodb:UpdateTable
 rds:DescribeDBInstances
 rds:DescribeValidDBInstanceModifications
 rds:ModifyDBInstance
+pricing:GetProducts
 ```
+
+`AWS_PRICING_REGION` selects the regional endpoint of the Price List Query API;
+the product filters still use `AWS_REGION` for the resources being changed.
+Set `AWS_PRICING_MODE=aws` to preview real AWS prices while remediation remains
+simulated. Real remediation always forces real server-side pricing. AWS pricing,
+resource discovery, monitoring, and remediation clients ignore the global
+`AWS_ENDPOINT_URL` used by LocalStack; dedicated test endpoints can instead be
+set with `AWS_PRICING_ENDPOINT_URL`, `AWS_PRICING_RESOURCE_ENDPOINT_URL`,
+`CLOUDWATCH_METRICS_ENDPOINT_URL`, and `AWS_REMEDIATION_ENDPOINT_URL`.
 
 Mutation permissions should be restricted to approved Auto Scaling Groups,
 DynamoDB tables, and RDS instances. The API itself must be authenticated before
