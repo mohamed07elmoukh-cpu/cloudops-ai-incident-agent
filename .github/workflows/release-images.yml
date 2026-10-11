@@ -1,0 +1,91 @@
+name: Release container images
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Container image tag
+        required: true
+        default: edge
+        type: string
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            context: .
+            dockerfile: apps/api/Dockerfile
+            package: cloudops-api
+          - name: incident-worker
+            context: .
+            dockerfile: apps/incident-worker/Dockerfile
+            package: cloudops-incident-worker
+          - name: faulty-service
+            context: demo/faulty-service
+            dockerfile: demo/faulty-service/Dockerfile
+            package: cloudops-faulty-service
+          - name: dashboard
+            context: apps/dashboard
+            dockerfile: apps/dashboard/Dockerfile
+            package: cloudops-dashboard
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Prepare image reference
+        id: image
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          version="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="${REQUESTED_TAG}"
+          fi
+          if [[ ! "${version}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "Invalid container tag: ${version}" >&2
+            exit 1
+          fi
+          echo "reference=ghcr.io/${owner}/${{ matrix.package }}:${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build Docker image
+        run: docker build --file "${{ matrix.dockerfile }}" --tag "${{ steps.image.outputs.reference }}" "${{ matrix.context }}"
+
+      - name: Scan Docker image before publication
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.reference }}
+          version: v0.74.0
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Log in to GitHub Container Registry
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Publish Docker image
+        run: docker push "${{ steps.image.outputs.reference }}"
+

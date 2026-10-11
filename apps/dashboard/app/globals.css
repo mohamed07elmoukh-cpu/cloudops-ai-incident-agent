@@ -180,6 +180,46 @@ button { cursor: pointer; }
 .resource-state { grid-column: 2; margin-top: -8px; display: flex; align-items: center; gap: 7px; color: #137333; font-size: 9px; }
 .resource-state .status-dot { width: 6px; height: 6px; margin: 0; box-shadow: none; }
 .recent-incidents { margin-top: 18px; }
+
+.business-impact-card { margin-bottom: 18px; overflow: hidden; border-color: #c7d7f2; background: linear-gradient(135deg, #fff 0%, #fbfdff 64%, #f4f8ff 100%); }
+.business-impact-card.at_risk { border-color: #f5cf85; background: linear-gradient(135deg, #fff 0%, #fffdf8 64%, #fff8e8 100%); }
+.business-impact-card.exhausted { border-color: #efb4ae; background: linear-gradient(135deg, #fff 0%, #fffafa 64%, #fdf0ef 100%); }
+.business-impact-head { min-height: 82px; padding: 17px 20px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid rgba(199,215,242,.72); }
+.business-service-identity { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.business-service-icon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 10px; color: #174ea6; background: #e8f0fe; }
+.at_risk .business-service-icon { color: #8a5100; background: #fef0c3; }
+.exhausted .business-service-icon { color: #b3261e; background: #fce8e6; }
+.business-service-identity h2 { margin: 2px 0 3px; font-size: 17px; letter-spacing: -.02em; }
+.business-service-identity > div > span:last-child { color: var(--subtle); font-size: 9px; }
+.slo-status { padding: 5px 9px; border-radius: 12px; color: #137333; background: #e6f4ea; font-size: 9px; font-weight: 750; white-space: nowrap; }
+.slo-status.at_risk { color: #8a5100; background: #fef0c3; }
+.slo-status.exhausted { color: #b3261e; background: #fce8e6; }
+.business-impact-statement { padding: 16px 20px 13px; }
+.business-impact-statement strong { display: block; color: #29323d; font-size: 14px; font-weight: 650; line-height: 1.55; }
+.business-impact-statement > span { display: block; margin-top: 5px; color: var(--subtle); font-size: 9px; }
+.slo-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 20px; overflow: hidden; border: 1px solid #e2e8f1; border-radius: 11px; background: rgba(255,255,255,.88); }
+.slo-metric-grid article { min-width: 0; min-height: 76px; padding: 14px; display: flex; align-items: center; gap: 10px; border-right: 1px solid #e8edf4; }
+.slo-metric-grid article:last-child { border-right: 0; }
+.slo-metric-icon { width: 31px; height: 31px; flex: none; display: grid; place-items: center; border-radius: 8px; color: #174ea6; background: #edf3fe; }
+.slo-metric-icon.risk { color: #b3261e; background: #fce8e6; }
+.slo-metric-icon.warning { color: #8a5100; background: #fef7e0; }
+.slo-metric-grid article > div { min-width: 0; }
+.slo-metric-grid article > div > span { display: block; overflow: hidden; color: var(--subtle); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+.slo-metric-grid strong { display: block; margin-top: 5px; color: #27313d; font-size: 15px; font-weight: 650; white-space: nowrap; }
+.slo-metric-grid strong small { color: var(--subtle); font-size: 8px; font-weight: 550; }
+.error-budget-panel { padding: 15px 20px 17px; }
+.error-budget-copy { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.error-budget-copy div span, .error-budget-copy div strong { display: block; }
+.error-budget-copy div span { color: #475467; font-size: 9px; font-weight: 650; }
+.error-budget-copy div strong { margin-top: 2px; font-size: 12px; }
+.error-budget-copy > span { color: var(--subtle); font-size: 8px; text-align: right; }
+.error-budget-track { height: 7px; margin-top: 8px; overflow: hidden; border-radius: 5px; background: #e5e9ef; }
+.error-budget-track span { height: 100%; display: block; border-radius: inherit; background: #188038; transition: width .3s ease; }
+.at_risk .error-budget-track span { background: #f9ab00; }
+.exhausted .error-budget-track span { background: #d93025; }
+.saturation-source { margin-top: 9px; display: flex; align-items: center; gap: 6px; color: var(--subtle); font-size: 8px; }
+.business-impact-skeleton { height: 300px; margin-bottom: 18px; }
+
 .live-infrastructure {
   margin: 0 0 18px; padding: 20px; overflow: hidden;
   border: 1px solid #dfe3eb; border-radius: 16px;
@@ -345,6 +385,9 @@ tbody tr:hover { background: #f8fbff; }
   .detail-grid { grid-template-columns: 1fr; }
   .insight-grid { grid-template-columns: 1fr; }
   .live-resource-grid { grid-template-columns: 1fr; }
+  .slo-metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .slo-metric-grid article:nth-child(2) { border-right: 0; }
+  .slo-metric-grid article:nth-child(-n+2) { border-bottom: 1px solid #e8edf4; }
   .live-resource-card { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(0, 1.3fr); }
   .live-resource-head, .live-summary-grid, .instance-class-row, .event-rail { grid-column: 1; }
   .live-chart, .live-series-legend { grid-column: 2; grid-row: 1 / span 3; }
@@ -364,5 +407,11 @@ tbody tr:hover { background: #f8fbff; }
   .definition-grid { grid-template-columns: 1fr; }.card-header, .card-body { padding-left: 16px; padding-right: 16px; }
   .live-indicator { font-size: 10px; }
   .live-infrastructure { padding: 15px; }.live-section-head { flex-direction: column; }.live-controls { width: 100%; justify-content: space-between; }
+  .business-impact-head, .error-budget-copy { align-items: flex-start; flex-direction: column; }
+  .business-impact-head, .business-impact-statement, .error-budget-panel { padding-left: 16px; padding-right: 16px; }
+  .slo-metric-grid { grid-template-columns: 1fr; margin-left: 16px; margin-right: 16px; }
+  .slo-metric-grid article { border-right: 0; border-bottom: 1px solid #e8edf4; }
+  .slo-metric-grid article:last-child { border-bottom: 0; }
+  .error-budget-copy > span { text-align: left; }
   .live-resource-card { display: block; }.live-chart { height: 220px; }.live-section-footer { flex-wrap: wrap; }.live-updated { width: 100%; margin-left: 0; }
 }

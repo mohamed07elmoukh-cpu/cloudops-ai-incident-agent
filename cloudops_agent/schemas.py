@@ -152,6 +152,43 @@ class IncidentStatistics(BaseModel):
     daily_trend: list[DailyIncidentPoint]
 
 
+class BusinessImpactRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    service_key: str
+    service_name: str
+    criticality: Literal["standard", "high", "critical"]
+    transactions_per_minute: float = Field(ge=0)
+    transactions_at_risk_per_minute: float = Field(ge=0)
+    slo_target_percent: float = Field(gt=0, le=100)
+    slo_window_days: int = Field(gt=0)
+    window_started_at: datetime
+    assessed_at: datetime
+    availability_percent: float = Field(ge=0, le=100)
+    error_budget_total_minutes: float = Field(ge=0)
+    error_budget_consumed_minutes: float = Field(ge=0)
+    error_budget_remaining_minutes: float = Field(ge=0)
+    error_budget_remaining_percent: float = Field(ge=0, le=100)
+    error_budget_burn_rate: float = Field(ge=0)
+    status: Literal["healthy", "at_risk", "exhausted"]
+    active_incidents: int = Field(ge=0)
+    affected_resources: list[str]
+    time_to_saturation_minutes: float | None = Field(default=None, ge=0)
+    saturation_metric: str | None
+    saturation_method: Literal["observed_trend", "conservative_projection", "unavailable"]
+    summary: str
+    assumptions: list[str]
+
+
+class BusinessImpactOverviewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    assessed_at: datetime
+    total_transactions_at_risk_per_minute: float = Field(ge=0)
+    services_at_risk: int = Field(ge=0)
+    services: list[BusinessImpactRead]
+
+
 class LiveMetricSeries(BaseModel):
     key: str
     label: str

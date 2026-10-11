@@ -105,6 +105,39 @@ export interface Statistics {
   daily_trend: DailyIncidentPoint[];
 }
 
+export interface BusinessImpact {
+  service_key: string;
+  service_name: string;
+  criticality: "standard" | "high" | "critical";
+  transactions_per_minute: number;
+  transactions_at_risk_per_minute: number;
+  slo_target_percent: number;
+  slo_window_days: number;
+  window_started_at: string;
+  assessed_at: string;
+  availability_percent: number;
+  error_budget_total_minutes: number;
+  error_budget_consumed_minutes: number;
+  error_budget_remaining_minutes: number;
+  error_budget_remaining_percent: number;
+  error_budget_burn_rate: number;
+  status: "healthy" | "at_risk" | "exhausted";
+  active_incidents: number;
+  affected_resources: string[];
+  time_to_saturation_minutes: number | null;
+  saturation_metric: string | null;
+  saturation_method: "observed_trend" | "conservative_projection" | "unavailable";
+  summary: string;
+  assumptions: string[];
+}
+
+export interface BusinessImpactOverview {
+  assessed_at: string;
+  total_transactions_at_risk_per_minute: number;
+  services_at_risk: number;
+  services: BusinessImpact[];
+}
+
 export type CloudResourceType = "EC2" | "DYNAMODB" | "RDS";
 
 export interface LiveMetricSeries {

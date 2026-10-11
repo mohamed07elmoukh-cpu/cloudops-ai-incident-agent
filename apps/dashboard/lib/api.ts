@@ -1,4 +1,6 @@
 import type {
+  BusinessImpact,
+  BusinessImpactOverview,
   CostEstimate,
   Incident,
   IncidentFilters,
@@ -52,6 +54,9 @@ export const getIncidentEvents = (id: string) =>
 export const getIncidentTimeline = (id: string) =>
   request<TimelineEntry[]>(`/incidents/${id}/timeline`);
 export const getStatistics = () => request<Statistics>("/statistics");
+export const getBusinessImpact = () => request<BusinessImpactOverview>("/business-impact");
+export const getIncidentBusinessImpact = (id: string) =>
+  request<BusinessImpact>(`/incidents/${id}/business-impact`);
 export const getLiveMetrics = (windowMinutes = 60) =>
   request<LiveMetrics>(`/metrics/live?window_minutes=${windowMinutes}`);
 export async function getSystemHealth(): Promise<SystemHealth> {

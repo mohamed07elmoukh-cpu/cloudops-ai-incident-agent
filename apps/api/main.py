@@ -31,6 +31,7 @@ from cloudops_agent.events.alertmanager import (
     alertmanager_to_cloud_events,
 )
 from cloudops_agent.events.queue import EventQueue, SqsEventQueue
+from cloudops_agent.impact import BusinessImpactService
 from cloudops_agent.models import (
     Incident,
     IncidentStatus,
@@ -52,6 +53,8 @@ from cloudops_agent.remediation.executor import (
 )
 from cloudops_agent.remediation.runbooks import InvalidRunbookError, RunbookLoader
 from cloudops_agent.schemas import (
+    BusinessImpactOverviewRead,
+    BusinessImpactRead,
     CostEstimateRead,
     DailyIncidentPoint,
     DetectionEvaluationResponse,
@@ -94,6 +97,11 @@ QueueDependency = Annotated[EventQueue, Depends(get_event_queue)]
 @lru_cache
 def get_cloudwatch_metrics_reader() -> CloudWatchMetricsReader:
     return CloudWatchMetricsReader()
+
+
+@lru_cache
+def get_business_impact_service() -> BusinessImpactService:
+    return BusinessImpactService()
 
 
 def _incident_query() -> Select[tuple[Incident]]:
@@ -209,6 +217,26 @@ def get_correlated_incidents(incident_id: uuid.UUID, session: SessionDependency)
 @app.get("/api/incidents/{incident_id}", response_model=IncidentRead)
 def get_incident(incident_id: uuid.UUID, session: SessionDependency) -> Incident:
     return _get_incident_or_404(session, incident_id)
+
+
+@app.get(
+    "/api/incidents/{incident_id}/business-impact",
+    response_model=BusinessImpactRead,
+)
+def get_incident_business_impact(
+    incident_id: uuid.UUID, session: SessionDependency
+) -> BusinessImpactRead:
+    incident = _get_incident_or_404(session, incident_id)
+    incidents = list(session.scalars(_incident_query()).unique())
+    assessment = get_business_impact_service().assess_incident(incident, incidents)
+    return BusinessImpactRead.model_validate(assessment)
+
+
+@app.get("/api/business-impact", response_model=BusinessImpactOverviewRead)
+def get_business_impact(session: SessionDependency) -> BusinessImpactOverviewRead:
+    incidents = list(session.scalars(_incident_query()).unique())
+    overview = get_business_impact_service().overview(incidents)
+    return BusinessImpactOverviewRead.model_validate(overview)
 
 
 @app.get("/api/incidents/{incident_id}/events", response_model=list[ProcessedEventRead])

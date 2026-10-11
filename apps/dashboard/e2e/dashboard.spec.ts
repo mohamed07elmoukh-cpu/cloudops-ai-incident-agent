@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import type { Incident, LiveMetrics } from "@/lib/types";
+import type { BusinessImpact, Incident, LiveMetrics } from "@/lib/types";
 
 const incident: Incident = {
   id: "20662f5b-cf00-4f7e-a3b6-d59570e41800",
@@ -23,6 +23,32 @@ const incident: Incident = {
   verification_failures: 0,
   evidence: [{ incident_id: "20662f5b-cf00-4f7e-a3b6-d59570e41800", metric_name: "cpu_usage_percent", metric_value: 92, threshold: 85, timestamp: "2026-09-02T20:00:00Z", raw_data: {} }],
   remediation_executions: [],
+};
+
+const businessImpact: BusinessImpact = {
+  service_key: "service:checkout",
+  service_name: "Commandes",
+  criticality: "critical",
+  transactions_per_minute: 240,
+  transactions_at_risk_per_minute: 240,
+  slo_target_percent: 99.9,
+  slo_window_days: 30,
+  window_started_at: "2026-08-03T20:00:00Z",
+  assessed_at: "2026-09-02T20:00:00Z",
+  availability_percent: 99.98,
+  error_budget_total_minutes: 43.2,
+  error_budget_consumed_minutes: 8.5,
+  error_budget_remaining_minutes: 34.7,
+  error_budget_remaining_percent: 80.32,
+  error_budget_burn_rate: 0.2,
+  status: "at_risk",
+  active_incidents: 1,
+  affected_resources: ["orders-db"],
+  time_to_saturation_minutes: 18,
+  saturation_metric: "FreeStorageSpace",
+  saturation_method: "observed_trend",
+  summary: "L’incident RDS menace le service Commandes et 240 transactions/minute.",
+  assumptions: [],
 };
 
 const metricTimes = Array.from({ length: 8 }, (_, index) =>
@@ -77,6 +103,13 @@ async function mockDashboardApi(page: Page) {
   await page.route("**/backend/api/incidents?*", (route) => route.fulfill({ headers: { "X-Total-Count": "1", "X-Page": "1", "X-Page-Size": "20" }, json: [incident] }));
   await page.route("**/backend/api/system/health", (route) => route.fulfill({ json: { status: "healthy", checked_at: "2026-09-02T20:01:00Z", components: { api: { status: "healthy" }, postgresql: { status: "healthy" }, sqs: { status: "healthy", visible_messages: 0, in_flight_messages: 0 }, worker: { status: "healthy" } } } }));
   await page.route("**/backend/api/metrics/live?*", (route) => route.fulfill({ json: liveMetrics }));
+  await page.route("**/backend/api/business-impact", (route) => route.fulfill({ json: { assessed_at: businessImpact.assessed_at, total_transactions_at_risk_per_minute: 240, services_at_risk: 1, services: [businessImpact] } }));
+}
+
+async function mockIncidentBusinessImpact(page: Page) {
+  await page.route("**/backend/api/incidents/*/business-impact", (route) =>
+    route.fulfill({ json: businessImpact }),
+  );
 }
 
 test("affiche une vue opérationnelle claire", async ({ page }) => {
@@ -89,12 +122,15 @@ test("affiche une vue opérationnelle claire", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Amazon EC2" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Amazon DynamoDB" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Amazon RDS" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Commandes" })).toBeVisible();
+  await expect(page.getByText("240 txn/min")).toBeVisible();
   await expect(page.getByText(incident.title)).toBeVisible();
   await page.screenshot({ path: "test-results/dashboard-preview.png", fullPage: true });
 });
 
 test("filtre les incidents et ouvre leur détail", async ({ page }) => {
   await mockDashboardApi(page);
+  await mockIncidentBusinessImpact(page);
   await page.route(`**/backend/api/incidents/${incident.id}`, (route) => route.fulfill({ json: incident }));
   await page.route(`**/backend/api/incidents/${incident.id}/events`, (route) => route.fulfill({ json: [] }));
   await page.route(`**/backend/api/incidents/${incident.id}/correlated`, (route) => route.fulfill({ json: [incident] }));
@@ -109,6 +145,7 @@ test("filtre les incidents et ouvre leur détail", async ({ page }) => {
 });
 
 test("confirme la remédiation puis résout l’incident", async ({ page }) => {
+  await mockIncidentBusinessImpact(page);
   let current: Incident = { ...incident };
   await page.route(new RegExp(`/backend/api/incidents/${incident.id}$`), (route) =>
     route.fulfill({ json: current }),
@@ -158,6 +195,7 @@ test("confirme la remédiation puis résout l’incident", async ({ page }) => {
 });
 
 test("configure une mise à l’échelle EC2 avec garde-fou de coût", async ({ page }) => {
+  await mockIncidentBusinessImpact(page);
   const ec2Incident: Incident = {
     ...incident,
     source: "api-asg",

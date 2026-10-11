@@ -25,6 +25,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { DashboardBusinessImpact } from "@/components/business-impact";
 import { IncidentTable } from "@/components/incident-table";
 import { LiveInfrastructure } from "@/components/live-infrastructure";
 import { formatDuration, getIncidents, getStatistics, getSystemHealth } from "@/lib/api";
@@ -163,6 +164,8 @@ export function DashboardOverview() {
       <MetricCard label="Temps moyen de résolution" value={formatDuration(stats?.average_resolution_seconds ?? null)} note="MTTR" icon={Clock3} />
       <MetricCard label="État de la plateforme" value={health.data?.status === "healthy" ? "Opérationnel" : health.isLoading ? "—" : "Dégradé"} note={`${healthyComponents}/4 services`} tone={health.data?.status === "healthy" ? "success" : "warning"} icon={Activity} />
     </section>
+
+    <DashboardBusinessImpact />
 
     <LiveInfrastructure />
 

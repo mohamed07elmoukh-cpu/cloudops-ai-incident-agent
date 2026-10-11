@@ -97,3 +97,24 @@ def test_live_metrics_endpoint_exposes_demo_series_and_audit_markers(client: Tes
     ec2 = next(resource for resource in payload["resources"] if resource["resource_type"] == "EC2")
     assert len(ec2["points"]) == 91
     assert any(marker["source"] == "audit" for marker in ec2["markers"])
+
+
+def test_business_impact_endpoints_connect_incidents_to_the_orders_slo(
+    client: TestClient,
+) -> None:
+    incident = create_resource_incident(client, "RDS", "orders-db", "CPUUtilization")
+
+    overview = client.get("/api/business-impact")
+    detail = client.get(f"/api/incidents/{incident['id']}/business-impact")
+
+    assert overview.status_code == 200
+    assert detail.status_code == 200
+    payload = overview.json()
+    assessment = detail.json()
+    assert payload["total_transactions_at_risk_per_minute"] == 240
+    assert payload["services_at_risk"] == 1
+    assert assessment["service_name"] == "Commandes"
+    assert assessment["slo_target_percent"] == 99.9
+    assert assessment["transactions_at_risk_per_minute"] == 240
+    assert assessment["time_to_saturation_minutes"] is not None
+    assert "240 transactions/minute" in assessment["summary"]
